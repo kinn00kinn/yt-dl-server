@@ -7,7 +7,7 @@ import os
 import shutil
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5500", "http://127.0.0.1:5500"])  # 両方のオリジンを許可
+CORS(app, origins=["https://kinn00kinn.github.io"])  # GitHub PagesのURLを指定
 
 download_lock = Lock()
 
