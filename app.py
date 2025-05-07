@@ -7,14 +7,20 @@ import os
 import shutil
 
 app = Flask(__name__)
-CORS(app, origins=["https://kinn00kinn.github.io"])  # フロントエンドからのCORS許可
+CORS(app, origins=["https://kinn00kinn.github.io"])
 
 download_lock = Lock()
 
-def download_video(url, format_option, quality, cookies=None):
+def download_video(url, format_option, quality, cookies_text=None):
     temp_dir = tempfile.mkdtemp()
+    cookie_file_path = None
 
-    # yt-dlp基本オプション
+    # Cookie をファイルに書き出す (Netscape 形式を想定)
+    if cookies_text:
+        cookie_file_path = os.path.join(temp_dir, "cookies.txt")
+        with open(cookie_file_path, "w", encoding="utf-8") as f:
+            f.write(cookies_text)
+
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": os.path.join(temp_dir, "%(title)s.%(ext)s"),
@@ -22,16 +28,11 @@ def download_video(url, format_option, quality, cookies=None):
         "quiet": True,
         "geo_bypass": True,
         "nocheckcertificate": True,
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
     }
 
-    # クッキーが指定されていればヘッダーに追加
-    if cookies:
-        ydl_opts["http_headers"]["Cookie"] = cookies
+    if cookie_file_path:
+        ydl_opts["cookiefile"] = cookie_file_path
 
-    # 音声(mp3)形式オプション
     if format_option == "audio":
         ydl_opts["format"] = "bestaudio"
         ydl_opts["postprocessors"] = [{
@@ -39,8 +40,6 @@ def download_video(url, format_option, quality, cookies=None):
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }]
-
-    # 映像(mp4)形式オプション
     elif format_option == "video":
         if quality == "low":
             ydl_opts["format"] = "worstvideo+bestaudio"
@@ -71,12 +70,12 @@ def download():
         url = data.get("url")
         format_option = data.get("type")
         quality = data.get("quality", "high")
-        cookies = data.get("cookies", None)
+        cookies_text = data.get("cookies")  # ここで受け取る
 
         if not url or format_option not in {"audio", "video"}:
             return jsonify({"error": "Invalid request parameters"}), 400
 
-        filename, temp_dir = download_video(url, format_option, quality, cookies)
+        filename, temp_dir = download_video(url, format_option, quality, cookies_text)
 
         @after_this_request
         def cleanup(response):
