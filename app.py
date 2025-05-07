@@ -7,19 +7,20 @@ import os
 import shutil
 
 app = Flask(__name__)
-CORS(app, origins=["https://kinn00kinn.github.io"])
+CORS(app, origins=["https://kinn00kinn.github.io"])  # GitHub Pages フロントエンドからの許可
 
 download_lock = Lock()
 
-def download_video(url, format_option, quality, cookies_text=None):
-    temp_dir = tempfile.mkdtemp()
-    cookie_file_path = None
+def save_cookies_to_file(cookies_str):
+    """ クッキー文字列をNetscape形式で一時ファイルに保存 """
+    cookies_file = tempfile.mktemp(suffix='.txt')
+    with open(cookies_file, 'w') as f:
+        f.write(cookies_str)
+    return cookies_file
 
-    # Cookie をファイルに書き出す (Netscape 形式を想定)
-    if cookies_text:
-        cookie_file_path = os.path.join(temp_dir, "cookies.txt")
-        with open(cookie_file_path, "w", encoding="utf-8") as f:
-            f.write(cookies_text)
+def download_video(url, format_option, quality, cookies_file):
+    """ yt-dlpを使って動画をダウンロード """
+    temp_dir = tempfile.mkdtemp()
 
     ydl_opts = {
         "format": "bestaudio/best",
@@ -28,10 +29,8 @@ def download_video(url, format_option, quality, cookies_text=None):
         "quiet": True,
         "geo_bypass": True,
         "nocheckcertificate": True,
+        "cookiefile": cookies_file,  # クッキーを指定
     }
-
-    if cookie_file_path:
-        ydl_opts["cookiefile"] = cookie_file_path
 
     if format_option == "audio":
         ydl_opts["format"] = "bestaudio"
@@ -55,6 +54,7 @@ def download_video(url, format_option, quality, cookies_text=None):
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
+
         if format_option == "audio":
             filename = os.path.splitext(filename)[0] + ".mp3"
 
@@ -70,17 +70,25 @@ def download():
         url = data.get("url")
         format_option = data.get("type")
         quality = data.get("quality", "high")
-        cookies_text = data.get("cookies")  # ここで受け取る
+        cookies = data.get("cookies", "")
 
         if not url or format_option not in {"audio", "video"}:
             return jsonify({"error": "Invalid request parameters"}), 400
 
-        filename, temp_dir = download_video(url, format_option, quality, cookies_text)
+        # クッキーをNetscape形式のファイルに保存
+        if cookies:
+            cookies_file = save_cookies_to_file(cookies)
+        else:
+            cookies_file = None
+
+        filename, temp_dir = download_video(url, format_option, quality, cookies_file)
 
         @after_this_request
         def cleanup(response):
             try:
                 shutil.rmtree(temp_dir)
+                if cookies_file:
+                    os.remove(cookies_file)  # クッキーの一時ファイルを削除
             except Exception as e:
                 app.logger.error(f"Failed to clean up: {e}")
             return response
