@@ -2,3 +2,4 @@ Flask
 Flask-CORS
 yt-dlp
 gunicorn
+ffmpeg-python
