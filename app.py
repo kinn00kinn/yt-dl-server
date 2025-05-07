@@ -7,24 +7,22 @@ import os
 import shutil
 
 app = Flask(__name__)
-CORS(app, origins=["https://kinn00kinn.github.io"])
+CORS(app, origins=["https://kinn00kinn.github.io"])  # GitHub Pages フロントエンドからの許可
 
 download_lock = Lock()
 
 def download_video(url, format_option, quality):
     temp_dir = tempfile.mkdtemp()
 
-    # ダウンロード設定
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": os.path.join(temp_dir, "%(title)s.%(ext)s"),
         "noplaylist": True,
-        "geo_bypass": True,
-        "user_agent": "Mozilla/5.0",
         "quiet": True,
+        "geo_bypass": True,
+        "nocheckcertificate": True,
     }
 
-    # 音声（mp3）変換を行う
     if format_option == "audio":
         ydl_opts["format"] = "bestaudio"
         ydl_opts["postprocessors"] = [{
@@ -32,7 +30,6 @@ def download_video(url, format_option, quality):
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }]
-
     elif format_option == "video":
         if quality == "low":
             ydl_opts["format"] = "worstvideo+bestaudio"
@@ -48,11 +45,12 @@ def download_video(url, format_option, quality):
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
-        # mp3変換後のファイル名を推測
+
         if format_option == "audio":
             filename = os.path.splitext(filename)[0] + ".mp3"
 
     return filename, temp_dir
+
 
 @app.route("/download", methods=["POST"])
 def download():
@@ -79,11 +77,12 @@ def download():
             return response
 
         return send_file(filename, as_attachment=True, download_name=os.path.basename(filename))
-
     except Exception as e:
+        app.logger.exception("Download failed:")
         return jsonify({"error": str(e)}), 500
     finally:
         download_lock.release()
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
